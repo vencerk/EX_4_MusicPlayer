@@ -14,20 +14,27 @@ import android.os.Bundle;
 
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.AdapterView;
 import android.widget.Button;
 import android.widget.ListView;
+import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Timer;
 
 public class MainActivity extends AppCompatActivity implements View.OnClickListener{
     private MediaPlayer mediaPlayer;//播放器
     private List<Music> musicList = new ArrayList<>();//歌曲
     private List<File> musicFile = new ArrayList<>();//mp3文件
     private int cMusicId = 0;//当前播放的音乐的id
+    private boolean isSeekBarChanging;//互斥变量，防止进度条与定时器冲突。
+    private int currentPosition;//当前音乐播放的进度
+    private SeekBar seekBar;
+    private Timer timer;
     TextView tv1;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -100,7 +107,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         try{
             mediaPlayer=new MediaPlayer();
             mediaPlayer.setDataSource(musicList.get(cMusicId).getPath());//默认第一个音乐
-            tv1.setText(musicList.get(cMusicId).getNameM()+cMusicId);
+            //tv1.setText(musicList.get(cMusicId).getNameM()+cMusicId);
             mediaPlayer.prepare();//准备
         }catch (Exception e){
             e.printStackTrace();
@@ -147,6 +154,24 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         MusicAdapter adapter = new MusicAdapter(MainActivity.this, R.layout.music_item, musicList);
         ListView lvw = findViewById(R.id.listWords);
         lvw.setAdapter(adapter);
+        lvw.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+            @Override
+            public void onItemClick(AdapterView<?> adapterView, View view, int i, long l) {
+                String mpath=musicList.get(i).getPath();
+                mediaPlayer.stop();
+                mediaPlayer=new MediaPlayer();
+                try {
+                    mediaPlayer.setDataSource(mpath);//默认第一个音乐
+                    mediaPlayer.prepare();//准备
+
+                    mediaPlayer.start();//播放
+                }catch (Exception e){
+                    e.printStackTrace();
+                }
+                    //Toast.makeText(MainActivity.this,word,Toast.LENGTH_LONG).show();
+
+            }
+        });
 
     }
     public void getSDcardFile(File groupPath) {
