@@ -6,6 +6,11 @@ public class Music {
     private String path;
 
 
+    public Music(String nameM, String path) {
+        this.nameM = nameM;
+        //this.singer = singer;
+        this.path = path;
+    }
 
     public void setNameM(String nameM) {
         this.nameM = nameM;

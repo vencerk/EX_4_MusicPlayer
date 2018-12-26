@@ -9,11 +9,4 @@
         android:layout_height="wrap_content"
         android:textSize="30dp"
         />
-    <TextView
-        android:id="@+id/singerName"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:textSize="20dp"
-        android:layout_marginLeft="20dp"
-        />
 </LinearLayout>

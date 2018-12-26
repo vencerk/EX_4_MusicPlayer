@@ -1,6 +1,7 @@
 package com.example.ex_4_musicplayer;
 
 import android.Manifest;
+import android.content.ContentResolver;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.media.MediaPlayer;
@@ -12,6 +13,7 @@ import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.ListView;
 import android.widget.TextView;
@@ -22,8 +24,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class MainActivity extends AppCompatActivity implements View.OnClickListener{
-    private MediaPlayer mediaPlayer=new MediaPlayer();
-    private List<Music> musicList = new ArrayList<>();
+    private MediaPlayer mediaPlayer;//播放器
+    private List<Music> musicList = new ArrayList<>();//歌曲
+    private List<File> musicFile = new ArrayList<>();//mp3文件
+    private int cMusicId = 0;//当前播放的音乐的id
     TextView tv1;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -39,13 +43,15 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         playM.setOnClickListener(this);
         nextM.setOnClickListener(this);
 
+
+
         //如果用户给访问SD卡的权限，那么初始化MediaPlayer，否则直接结束
         if(ContextCompat.checkSelfPermission(MainActivity.this,Manifest.permission.WRITE_EXTERNAL_STORAGE)!=PackageManager.PERMISSION_GRANTED){
             ActivityCompat.requestPermissions(MainActivity.this,new String[]{
                     Manifest.permission.WRITE_EXTERNAL_STORAGE},1);
         }else{
-            initMediaPlayer();
-            getMusicList();
+            getMusicList();//获取播放列表并显示
+            initMediaPlayer();//初始化播放器
         }
 
 
@@ -61,8 +67,28 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                         mediaPlayer.start();//播放
                     }
                     break;
-
-
+                case R.id.nextM:
+                    try {
+                       // onDestroy();
+                        mediaPlayer.stop();
+                        cMusicId = (cMusicId + 1) % musicList.size();
+                        initMediaPlayer();
+                        mediaPlayer.start();//播放
+                    }catch (Exception e){
+                        e.printStackTrace();
+                    }
+                    break;
+                case R.id.lastM:
+                    try{
+                        //onDestroy();
+                        mediaPlayer.stop();
+                        cMusicId=(cMusicId+musicList.size()-1)%musicList.size();
+                        initMediaPlayer();
+                        mediaPlayer.start();//播放
+                    }catch (Exception e){
+                        e.printStackTrace();
+                    }
+                    break;
                     default:
                         break;
 
@@ -72,18 +98,12 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
     private void initMediaPlayer(){
         try{
-            File file = new File(Environment.getExternalStorageDirectory(),
-                    "团结就是力量.mp3");
-
-            mediaPlayer.setDataSource(file.getPath());//Music的路径
-
+            mediaPlayer=new MediaPlayer();
+            mediaPlayer.setDataSource(musicList.get(cMusicId).getPath());//默认第一个音乐
+            tv1.setText(musicList.get(cMusicId).getNameM()+cMusicId);
             mediaPlayer.prepare();//准备
-            int n = mediaPlayer.getDuration();
-            String timelong = n / 1000 + "s";
-            //tv1.setText(timelong);
         }catch (Exception e){
             e.printStackTrace();
-            Toast.makeText(this,"No",Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -112,28 +132,37 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     }
 
     public void getMusicList() {
+        File SdcardFile = Environment.getExternalStorageDirectory();//sdcard路径
+        getSDcardFile(SdcardFile);//获取mp3文件路径
+        int sfLength = musicFile.size(),i=0;
         musicList.clear();
-
-        Cursor cursor = MainActivity.this.getContentResolver().query(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
-                , null, null, null, MediaStore.Audio.AudioColumns.IS_MUSIC);
-
-        if (cursor != null) {
-tv1.setText("2");
-            while (cursor.moveToNext()) {
-                tv1.append("3");
-                String s1 = cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME));
-                String singer = cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST));
-                //song.path = cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA));
-                //song.duration = cursor.getInt(cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION));
-                Music m = new Music();
-                m.setNameM(s1);
-                m.setSinger(singer);
-                musicList.add(m);
+            while (i<sfLength) {
+                File c = musicFile.get(i);
+                String path = c.getPath();
+                String name = c.getName();
+                Music music = new Music(name, path);
+                musicList.add(music);
+                i++;
             }
-        }
-        cursor.close();
         MusicAdapter adapter = new MusicAdapter(MainActivity.this, R.layout.music_item, musicList);
         ListView lvw = findViewById(R.id.listWords);
         lvw.setAdapter(adapter);
+
     }
+    public void getSDcardFile(File groupPath) {
+        //循环获取sdcard目录下面的目录和文件
+        for (int i = 0; i < groupPath.listFiles().length; i++) {
+            File childFile = groupPath.listFiles()[i];
+            //假如是目录的话就继续调用getSDcardFile()将childFile作为参数传递的方法里面
+            if (childFile.isDirectory()) {
+                getSDcardFile(childFile);
+            } else {
+                //如果是文件的话,判断是不是以.mp3结尾,是就加入到List里面
+                if (childFile.toString().endsWith(".mp3")) {
+                    musicFile.add(childFile);
+                }
+            }
+        }
+    }
+
 }

@@ -21,9 +21,9 @@ public class MusicAdapter extends ArrayAdapter<Music> {
         Music m =getItem(position);
         View view = LayoutInflater.from(getContext()).inflate(resourceId,parent,false);
         TextView musicName = view.findViewById(R.id.musicName);
-        TextView singerName = view.findViewById(R.id.singerName);
+
         musicName.setText(m.getNameM());
-        singerName.setText("歌手："+m.getSinger());
+
         return view;
     }
 }
