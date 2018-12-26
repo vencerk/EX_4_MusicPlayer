@@ -6,6 +6,8 @@ import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.media.MediaPlayer;
 import android.os.Environment;
+import android.os.Handler;
+import android.os.Message;
 import android.provider.MediaStore;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
@@ -21,18 +23,32 @@ import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.UnsupportedEncodingException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Timer;
+import java.util.TimerTask;
 
 public class MainActivity extends AppCompatActivity implements View.OnClickListener{
+
     private MediaPlayer mediaPlayer;//播放器
-    private List<Music> musicList = new ArrayList<>();//歌曲
-    private List<File> musicFile = new ArrayList<>();//mp3文件
+    private List<Music> musicList = new ArrayList<>();//歌曲列表
+    private List<File> musicFile = new ArrayList<>();//mp3文件列表
+    private List<File> lrcFile = new ArrayList<>();//歌词文件列表
+    private List<lrcCLass> lrcList = new ArrayList<>();//歌词
     private int cMusicId = 0;//当前播放的音乐的id
+
     private boolean isSeekBarChanging;//互斥变量，防止进度条与定时器冲突。
-    private int currentPosition;//当前音乐播放的进度
+    private int currentTime=0;//当前音乐播放的进度
+    private int lrcFlag=0;//当前歌曲是否有歌词
     private SeekBar seekBar;
     private Timer timer;
     TextView tv1;
@@ -50,48 +66,64 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         playM.setOnClickListener(this);
         nextM.setOnClickListener(this);
 
-
+        seekBar = findViewById(R.id.playSeekBar);
+        seekBar.setOnSeekBarChangeListener(new MySeekBar());
 
         //如果用户给访问SD卡的权限，那么初始化MediaPlayer，否则直接结束
-        if(ContextCompat.checkSelfPermission(MainActivity.this,Manifest.permission.WRITE_EXTERNAL_STORAGE)!=PackageManager.PERMISSION_GRANTED){
-            ActivityCompat.requestPermissions(MainActivity.this,new String[]{
-                    Manifest.permission.WRITE_EXTERNAL_STORAGE},1);
+        if(ContextCompat.checkSelfPermission(MainActivity.this,Manifest.permission.WRITE_EXTERNAL_STORAGE)!=PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(MainActivity.this, new String[]{
+                    Manifest.permission.WRITE_EXTERNAL_STORAGE}, 1);
         }else{
             getMusicList();//获取播放列表并显示
-            initMediaPlayer();//初始化播放器
+            initMediaPlayer(musicList.get(cMusicId).getPath());//初始化播放器
         }
-
-
     }
+    private Handler handler = new Handler() {
+        @Override
+        public void handleMessage(Message msg) {
+            switch (msg.what) {
+                case 1:
+                    //tv1.append(""+mediaPlayer.getCurrentPosition());
+                    if(lrcFlag!=0) {
+                        lrcShow();
+                    }else {
+                        tv1.setText("当前播放："+musicList.get(cMusicId).getNameM());
+                    }
+                    break;
+            }
+
+        }
+    };
 
     @Override
     public void onClick(View v){
             switch (v.getId()){
                 case R.id.playM:
+                    Button playM = findViewById(R.id.playM);
                     if(mediaPlayer.isPlaying()){
+                        playM.setText("播放");
                         mediaPlayer.pause();//暂停
                     }else {
+                        playM.setText("暂停");
                         mediaPlayer.start();//播放
                     }
                     break;
                 case R.id.nextM:
                     try {
-                       // onDestroy();
                         mediaPlayer.stop();
                         cMusicId = (cMusicId + 1) % musicList.size();
-                        initMediaPlayer();
-                        mediaPlayer.start();//播放
+                        initMediaPlayer(musicList.get(cMusicId).getPath());
+                        mediaPlayer.start();
                     }catch (Exception e){
                         e.printStackTrace();
                     }
                     break;
                 case R.id.lastM:
                     try{
-                        //onDestroy();
                         mediaPlayer.stop();
                         cMusicId=(cMusicId+musicList.size()-1)%musicList.size();
-                        initMediaPlayer();
-                        mediaPlayer.start();//播放
+                        initMediaPlayer(musicList.get(cMusicId).getPath());
+                        mediaPlayer.start();
                     }catch (Exception e){
                         e.printStackTrace();
                     }
@@ -103,32 +135,49 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
     }
 
-    private void initMediaPlayer(){
+    //初始化播放器
+    private void initMediaPlayer(String path){
         try{
             mediaPlayer=new MediaPlayer();
-            mediaPlayer.setDataSource(musicList.get(cMusicId).getPath());//默认第一个音乐
-            //tv1.setText(musicList.get(cMusicId).getNameM()+cMusicId);
+            mediaPlayer.setDataSource(path);
             mediaPlayer.prepare();//准备
+            seekBar.setMax(mediaPlayer.getDuration());
+            currentTime=0;
+            String n1 = musicList.get(cMusicId).getNameM()+".lrc";//歌曲名字加上.lrc
+            //找到当前歌曲对应的歌词
+            lrcFlag=0;
+            for(int i =0;i<lrcFile.size();i++) {
+                String n2 = lrcFile.get(i).getName();//歌词文件名字 *.lrc
+                if(n1.equals(n2)) {
+                    lrcResolve(lrcFile.get(i));//初始化歌词列表
+                    lrcFlag = 1;
+                    break;
+                }
+            }
+
+
         }catch (Exception e){
             e.printStackTrace();
         }
-    }
+        timer = new Timer();
+        timer.schedule(new TimerTask() {
+            @Override
+            public void run() {
+                if(!isSeekBarChanging&&mediaPlayer.isPlaying()){
+                    //tv1.append(""+mediaPlayer.getCurrentPosition());
+                    seekBar.setProgress(mediaPlayer.getCurrentPosition());
+                    //lrcShow(currentTime);
 
-    @Override
-    public void onRequestPermissionsResult(int requestCode,String[] permissions,int[] grantResults){
-        switch (requestCode){
-            case 1:
-                if(grantResults.length>0&&grantResults[0]==PackageManager.PERMISSION_GRANTED){
-                    initMediaPlayer();
-                }else{
-                    Toast.makeText(this,"无权限使用程序",Toast.LENGTH_SHORT).show();
-                    finish();
+                        Message msg = new Message();
+                        msg.what = 1;
+                        handler.sendMessage(msg);
+
+
                 }
-                default:
-        }
-    }
+            }
+        },0,1000);
 
-
+}
     @Override
     protected void onDestroy(){
         super.onDestroy();
@@ -136,8 +185,11 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             mediaPlayer.stop();
             mediaPlayer.release();
         }
+        timer.cancel();
+        timer = null;
     }
 
+    //获取mp3文件列表
     public void getMusicList() {
         File SdcardFile = Environment.getExternalStorageDirectory();//sdcard路径
         getSDcardFile(SdcardFile);//获取mp3文件路径
@@ -147,6 +199,9 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 File c = musicFile.get(i);
                 String path = c.getPath();
                 String name = c.getName();
+
+                name=name.substring(0,name.length()-4);
+                //tv1.setText(name);
                 Music music = new Music(name, path);
                 musicList.add(music);
                 i++;
@@ -154,26 +209,23 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         MusicAdapter adapter = new MusicAdapter(MainActivity.this, R.layout.music_item, musicList);
         ListView lvw = findViewById(R.id.listWords);
         lvw.setAdapter(adapter);
+
         lvw.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
             public void onItemClick(AdapterView<?> adapterView, View view, int i, long l) {
-                String mpath=musicList.get(i).getPath();
+                String mpath = musicList.get(i).getPath();
+                cMusicId=i;
                 mediaPlayer.stop();
-                mediaPlayer=new MediaPlayer();
-                try {
-                    mediaPlayer.setDataSource(mpath);//默认第一个音乐
-                    mediaPlayer.prepare();//准备
+                initMediaPlayer(mpath);
+                mediaPlayer.start();//播放
 
-                    mediaPlayer.start();//播放
-                }catch (Exception e){
-                    e.printStackTrace();
-                }
-                    //Toast.makeText(MainActivity.this,word,Toast.LENGTH_LONG).show();
+                //Toast.makeText(MainActivity.this,word,Toast.LENGTH_LONG).show();
 
             }
         });
 
     }
+
     public void getSDcardFile(File groupPath) {
         //循环获取sdcard目录下面的目录和文件
         for (int i = 0; i < groupPath.listFiles().length; i++) {
@@ -186,8 +238,99 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 if (childFile.toString().endsWith(".mp3")) {
                     musicFile.add(childFile);
                 }
+                //判断是不是以lrc结尾,是就加入到List里面
+                if(childFile.toString().endsWith(".lrc")){
+                    lrcFile.add(childFile);
+                }
             }
         }
     }
 
+    //歌词解析
+    private void lrcResolve(File filename) {
+        InputStreamReader is=null;
+    try {
+        is = new InputStreamReader(new FileInputStream(filename), "utf-8");
+    } catch (FileNotFoundException e) {
+        e.printStackTrace();
+    }catch (UnsupportedEncodingException e){
+        e.printStackTrace();
+    }
+        BufferedReader reader = new BufferedReader(is);
+        String line;
+        //StringBuilder stringBuilder = new StringBuilder();
+        try {
+            while ((line = reader.readLine()) != null) {
+               // stringBuilder.append(line);
+
+                if(line.substring(0,2).equals("[0")) {//暂时只考虑十分钟以内的歌曲
+                    long minute = Integer.parseInt(line.substring(line.indexOf("[") + 1, line.lastIndexOf(":")));
+                    long second = Integer.parseInt(line.substring(line.indexOf(":") + 1,line.lastIndexOf(".")));
+                    long millisecond = Integer.parseInt(line.substring(line.indexOf(".") + 1,line.lastIndexOf("]")));
+                    long time1=(minute * 60 * 1000 + second * 1000 + millisecond);
+                    String s1 = line.substring(line.indexOf("]") + 1,line.length());
+                    lrcCLass lc = new lrcCLass();
+                    lc.setTime1(time1);
+                    lc.setOneLrc(s1);
+                    lrcList.add(lc);
+                }
+            }
+
+            //tv1.setText(stringBuilder.toString());
+            reader.close();
+            reader.close();
+            is.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+//歌词显示
+    private void lrcShow() {
+        long cTime = (long) mediaPlayer.getCurrentPosition()/1000;
+        lrcCLass lc1= lrcList.get(currentTime);
+        long n= lc1.getTime1()/1000;
+        if (cTime >= n) {
+            String s1 = lc1.getOneLrc();
+            tv1.setText(lc1.getOneLrc());
+            currentTime++;
+        }
+
+    }
+
+
+
+
+    //进度条
+    public class MySeekBar implements SeekBar.OnSeekBarChangeListener {
+        public void onProgressChanged(SeekBar seekBar, int progress,
+                                      boolean fromUser) {
+        }
+        /*滚动时,应当暂停后台定时器*/
+        public void onStartTrackingTouch(SeekBar seekBar) {
+            isSeekBarChanging = true;
+        }
+        /*滑动结束后，重新设置值*/
+        public void onStopTrackingTouch(SeekBar seekBar) {
+            isSeekBarChanging = false;
+            mediaPlayer.seekTo(seekBar.getProgress());
+
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode,String[] permissions,int[] grantResults){
+        switch (requestCode){
+            case 1:
+                if(grantResults.length>0&&grantResults[0]==PackageManager.PERMISSION_GRANTED){
+                    initMediaPlayer(musicList.get(cMusicId).getPath());
+                }else{
+                    Toast.makeText(this,"无权限使用程序",Toast.LENGTH_SHORT).show();
+                    finish();
+                }
+            default:
+        }
+    }
+
 }
+

@@ -43,7 +43,7 @@
         </LinearLayout>
         <SeekBar
             android:id="@+id/playSeekBar"
-            android:layout_width="140px"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginLeft="3px"
             android:layout_marginTop="5px" />
