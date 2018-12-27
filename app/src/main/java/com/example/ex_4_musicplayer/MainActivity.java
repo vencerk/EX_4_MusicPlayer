@@ -14,6 +14,7 @@ import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 
+import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
@@ -78,6 +79,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             initMediaPlayer(musicList.get(cMusicId).getPath());//初始化播放器
         }
     }
+
     private Handler handler = new Handler() {
         @Override
         public void handleMessage(Message msg) {
@@ -121,6 +123,12 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 case R.id.lastM:
                     try{
                         mediaPlayer.stop();
+
+
+                        timer.cancel();
+                        timer=null;
+
+
                         cMusicId=(cMusicId+musicList.size()-1)%musicList.size();
                         initMediaPlayer(musicList.get(cMusicId).getPath());
                         mediaPlayer.start();
@@ -159,11 +167,12 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         }catch (Exception e){
             e.printStackTrace();
         }
+
         timer = new Timer();
         timer.schedule(new TimerTask() {
             @Override
             public void run() {
-                if(!isSeekBarChanging&&mediaPlayer.isPlaying()){
+                if(!isSeekBarChanging&&mediaPlayer.isPlaying()){//如果进度条未改变，并且当前正在播放
                     //tv1.append(""+mediaPlayer.getCurrentPosition());
                     seekBar.setProgress(mediaPlayer.getCurrentPosition());
                     //lrcShow(currentTime);
@@ -248,6 +257,9 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
     //歌词解析
     private void lrcResolve(File filename) {
+
+        lrcList.clear();//清空上一首的歌词列表
+
         InputStreamReader is=null;
     try {
         is = new InputStreamReader(new FileInputStream(filename), "utf-8");
@@ -259,9 +271,11 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         BufferedReader reader = new BufferedReader(is);
         String line;
         //StringBuilder stringBuilder = new StringBuilder();
+
         try {
             while ((line = reader.readLine()) != null) {
                // stringBuilder.append(line);
+                Log.v("abcc",line);
 
                 if(line.substring(0,2).equals("[0")) {//暂时只考虑十分钟以内的歌曲
                     long minute = Integer.parseInt(line.substring(line.indexOf("[") + 1, line.lastIndexOf(":")));
